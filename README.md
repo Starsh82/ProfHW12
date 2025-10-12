@@ -1,68 +1,40 @@
 # ProfHW12
-Работа с процессами
----
-test_ps.sh
+Работа с процессами. Написать свою реализацию ps ax используя анализ /proc  
+Скрипт psax.sh эмулирующий вывод команды ps ax
 ```
 #!/bin/bash
+#Вывод заголовка
 echo -e "PID\tTTY\tSTAT\tTIME\tCOMMAND"
+#Запись всех PID (имена папок) из папки /proc
 pid_array=$(find /proc -maxdepth 1 -type d | grep -oE '[0-9]+$')
 for i in ${pid_array[@]}
 do
     tty='?'
     if [ -h /proc/$i/fd/0 ]; then
-        # if [ -c ]
-        tty="есть TTY" #/proc/$i/fd/0"
-        # echo "/proc/$i/fd/0"
-    fi
-    echo -e "$i $tty"
-done
-```
-
----
-
-psax.sh
-```
-#!/bin/bash
-echo -e "PID\tTTY\tSTAT\tTIME\tCOMMAND"
-pid_array=$(ls /proc/ | egrep [[:digit:]]|sort -n)
-for i in ${pid_array[@]}
-do
-#echo -e -n "$i\t"
-termin='?'
-if [ -h /proc/$i/fd/0 ]
-then
-        if [ -c $(readlink /proc/$i/fd/0) ]
-        then
-        termi=$(readlink /proc/$i/fd/0)
-                if [ $termi != '/dev/null' ]
-                then
-                termin=$(readlink /proc/$i/fd/0 |cut -c6-10)
-                fi
+        #Получение tty
+        if [ -c $(readlink /proc/$i/fd/0) ]; then
+            if [ $(readlink /proc/$i/fd/0) != '/dev/null' ]; then
+                tty=$(readlink /proc/$i/fd/0 | cut -c6-10)
+            fi
         fi
-fi
-#echo -e -n "$termin\t"
-if [ -f /proc/$i/status ]
-then
-procstat=$(sed -n '/State/p' /proc/$i/status |cut -d':' -f2 |cut -d'(' -f1 2>/dev/null)
-fi
-#echo -e -n "$procstat\t"
-utime=$(cut -d' ' -f14 /proc/$i/stat 2>/dev/null)
-ctime=$(cut -d' ' -f15 /proc/$i/stat 2>/dev/null)
-proctime=$((utime+ctime))
-proctime_min=$(($proctime/100/60))
-proctime_sec=$(($proctime/100%60))
-#echo -e -n "$proctime_min:$proctime_sec\t"
-if [ -d /proc/$i ]
-then
-	cmdline_length=$(wc -m /proc/$i/cmdline | cut -d' ' -f1)
-	if [ "$cmdline_length" -gt "0" ]
-	then
-		proccommand=$(tr -d '\0' </proc/$i/cmdline)
-	else
-		proccommand=$(tr -d '\0' </proc/$i/stat | cut -d' ' -f2)
-	fi
-fi
-#echo -e "$proccommand"
-echo -e "$i\t$termin\t$procstat\t$proctime_min:$proctime_sec\t$proccommand"
+    fi
+    if [ -f /proc/$i/stat ]; then
+        #Статус процесса
+        stat=$(cat /proc/$i/stat | awk '{print $3}')
+        #Суммарное вермя использования CPU
+        varHertz=$(getconf CLK_TCK)
+        utime=$(awk '{print $14}' /proc/$i/stat)
+        stime=$(awk '{print $15}' /proc/$i/stat)
+        let result=(utime+stime)/varHertz
+        time=$(date -u -d "@$result" +"%M:%S")
+    fi
+    #Вывод COMMAND
+    if [ -d /proc/$i ]; then
+        command=$(cat /proc/$i/cmdline | tr '\0' ' ')
+        if [ -z "$command" ]; then
+            command="[$(cat /proc/$i/comm)]"
+        fi
+    fi
+    echo -e "$i\t$tty\t$stat\t$time\t$command"
 done
 ```
